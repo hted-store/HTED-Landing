@@ -30,6 +30,8 @@ class HTED_Landing_HLV {
 
     /** Poids facturable du produit commandé (le calcul HTED Livraison lit sinon le panier, vide ici). */
     private static function with_weight($product, $qty, callable $fn) {
+        // Surpoids : seulement avec HTED Livraison ≥ 0.6 (avant, pas de calcul de poids : tarif de base)
+        if (!method_exists('HLV_Carriers', 'set_kg') || !method_exists('HLV_Carriers', 'lines_kg')) return $fn();
         HLV_Carriers::set_kg($product ? HLV_Carriers::lines_kg([[$product, max(1, (int) $qty)]]) : 0.0);
         try {
             return $fn();
@@ -140,7 +142,12 @@ class HTED_Landing_HLV {
                     $product = wc_get_product(absint($r['product']));
                     $qty = max(1, min(HTED_Landing_Order::MAX_QTY, absint($r['qty'])));
                     nocache_headers();
-                    return new WP_REST_Response(self::options($cid, $product ?: null, $qty));
+                    try {
+                        return new WP_REST_Response(self::options($cid, $product ?: null, $qty));
+                    } catch (Throwable $e) {
+                        if (function_exists('wc_get_logger')) wc_get_logger()->error('HTED Landing (frais) : ' . $e->getMessage(), ['source' => 'hted-landing']);
+                        return new WP_REST_Response(['home' => null, 'desk' => null, 'centers' => []], 500);
+                    }
                 },
             ]);
         });
