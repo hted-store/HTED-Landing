@@ -24,7 +24,8 @@
   var reqW = 0, reqC = 0;
 
   var fmt = function (n) { return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' '); };
-  var track = function (ev, data) { if (C.pixel && window.fbq) window.fbq('track', ev, data || {}); };
+  // eid : même identifiant que le Purchase serveur de Facebook for WooCommerce → dédoublonné par Meta
+  var track = function (ev, data, eid) { if (C.pixel && window.fbq) { if (eid) window.fbq('track', ev, data || {}, { eventID: eid }); else window.fbq('track', ev, data || {}); } };
   var getJSON = function (path) {
     return fetch(C.api + path, { headers: { Accept: 'application/json' } }).then(function (r) {
       if (!r.ok) throw new Error('http ' + r.status);
@@ -247,7 +248,7 @@
       .then(function (r) { return r.json(); })
       .then(function (res) {
         if (!res || !res.ok) throw new Error((res && res.message) || 'Erreur. Réessayez.');
-        if (!res.duplicate) track('Purchase', { content_ids: ids(), content_type: 'product', value: res.total, currency: 'DZD', num_items: count() });
+        if (!res.duplicate) track('Purchase', { content_ids: ids(), content_type: 'product', value: res.total, currency: 'DZD', num_items: count() }, res.event_id);
         try { window.dispatchEvent(new CustomEvent('hted:ordered', { detail: res })); } catch (e) {}
         form.hidden = true;
         $('hl-success-name').textContent = name.value.trim().split(/\s+/)[0];

@@ -171,8 +171,16 @@ class HTED_Landing_Order {
         set_transient($rl_key, $count + 1, 15 * MINUTE_IN_SECONDS);
 
         try {
-            $order = wc_create_order(['created_via' => 'hted-landing']);
-            foreach ($lines as $l) $order->add_product($l[0], $l[1]);
+            // Commande montée en mémoire puis enregistrée d'un coup (comme le checkout WooCommerce) :
+            // au premier enregistrement (woocommerce_new_order), produits, adresse et total sont déjà là.
+            // Facebook for WooCommerce envoie alors un Purchase serveur complet (valeur, téléphone),
+            // au lieu d'un Purchase vide à 0 DA avec wc_create_order().
+            $order = new WC_Order();
+            $order->set_created_via('hted-landing');
+            $order->set_currency(get_woocommerce_currency());
+            $order->set_prices_include_tax('yes' === get_option('woocommerce_prices_include_tax'));
+            foreach ($lines as $l) $order->add_item(self::line_item($l[0], $l[1]));
+            $order->set_status('pending');
 
             $parts = preg_split('/\s+/', $name, 2);
             $addr = [
@@ -224,13 +232,14 @@ class HTED_Landing_Order {
                 $order->update_meta_data('_yld_stopdesk_id', $type === 'desk' ? (int) $yld_data['center_id'] : 0);
             }
 
-            $order->calculate_totals(false);
             $note = 'Commande via landing « ' . $slug . ' » · ' . ($type === 'desk' ? 'stop desk' : 'domicile');
             if ($hlv_sel) $note .= ' · ' . HTED_Landing_HLV::carrier_label($hlv_sel['carrier'])
                 . ($type === 'desk' ? ' · bureau ' . $hlv_sel['desk_name'] : '') . ' · ' . number_format_i18n($fee) . ' DA (HTED Livraison)';
             if (!empty($yld_data['center_name'])) $note .= ' · bureau ' . $yld_data['center_name'] . ' (#' . $yld_data['center_id'] . ')';
             if (!empty($yld_data['commune_id'])) $note .= ' · commune Yalidine #' . $yld_data['commune_id'];
             if (!$known) $note .= ' · frais de livraison à confirmer par téléphone';
+            $order->calculate_totals(false); // premier enregistrement, statut « en attente » (comme le checkout)
+            // Puis passage au statut choisi : déclenche stock, e-mails et note, comme avant.
             $order->set_status(HTED_Landing_Settings::get('order_status'), $note);
             $order->save();
         } catch (Exception $e) {
@@ -239,11 +248,35 @@ class HTED_Landing_Order {
 
         set_transient($dup_key, $order->get_id(), 30 * MINUTE_IN_SECONDS);
 
+        // Identifiant d'événement créé par Facebook for WooCommerce pour son Purchase serveur (CAPI) :
+        // le Pixel du navigateur envoie le même, Meta ne compte alors l'achat qu'une fois.
+        $event_id = (string) $order->get_meta('_meta_event_id');
+        if ($event_id === '' && ($fresh = wc_get_order($order->get_id()))) $event_id = (string) $fresh->get_meta('_meta_event_id');
+
         return new WP_REST_Response([
-            'ok'     => true,
-            'number' => $order->get_order_number(),
-            'total'  => (float) $order->get_total(),
-            'phone'  => $phone,
+            'ok'       => true,
+            'number'   => $order->get_order_number(),
+            'total'    => (float) $order->get_total(),
+            'phone'    => $phone,
+            'event_id' => $event_id,
         ]);
+    }
+
+    /** Ligne produit non enregistrée (comme WC_Abstract_Order::add_product, sans le save() prématuré). */
+    private static function line_item(WC_Product $p, int $qty): WC_Order_Item_Product {
+        $total = wc_get_price_excluding_tax($p, ['qty' => $qty]);
+        $item = new WC_Order_Item_Product();
+        $item->set_props([
+            'name'         => $p->get_name(),
+            'tax_class'    => $p->get_tax_class(),
+            'product_id'   => $p->is_type('variation') ? $p->get_parent_id() : $p->get_id(),
+            'variation_id' => $p->is_type('variation') ? $p->get_id() : 0,
+            'variation'    => $p->is_type('variation') ? $p->get_variation_attributes() : [],
+            'subtotal'     => $total,
+            'total'        => $total,
+            'quantity'     => $qty,
+        ]);
+        $item->set_backorder_meta();
+        return $item;
     }
 }

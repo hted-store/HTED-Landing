@@ -1,4 +1,4 @@
-HTED Landing COD — version 3.3.0
+HTED Landing COD — version 3.3.1
 ================================
 
 Landing pages produit légères pour WooCommerce, avec formulaire de commande
@@ -86,3 +86,10 @@ FORMAT D'UN PAQUET DE LANDING (.zip)
   *.webp/jpg/png les images, à plat
 Jetons utilisables dans landing.html :
   {{price}}  {{product_name}}  {{img:nom-image.webp}}
+
+PIXEL META ET FACEBOOK FOR WOOCOMMERCE (3.3.1)
+- La commande est enregistrée d'un coup, complète (produits, adresse, total) : Facebook for WooCommerce
+  envoie son Purchase serveur (CAPI) avec la vraie valeur et le téléphone, au lieu d'un Purchase vide à 0 DA.
+- Le Purchase du navigateur reprend le même identifiant (event_id) : Meta ne compte l'achat qu'une fois.
+- Test : Gestionnaire d'événements Meta > Tester les événements, commande passée en étant DÉCONNECTÉ
+  de WordPress (Facebook for WooCommerce ignore les administrateurs connectés).
