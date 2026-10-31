@@ -256,7 +256,7 @@
         var s = $('hl-success');
         s.hidden = false;
         s.focus();
-        $('hl-sticky').classList.add('is-hidden');
+        if ($('hl-sticky')) $('hl-sticky').classList.add('is-hidden');
       })
       .catch(function (err) {
         btn.disabled = false;
@@ -267,7 +267,7 @@
 
   // Barre « Commander » fixe sur mobile, masquée quand le formulaire est visible.
   var sticky = $('hl-sticky');
-  if ('IntersectionObserver' in window) {
+  if (sticky && $('commande') && 'IntersectionObserver' in window) {
     new IntersectionObserver(function (entries) {
       entries.forEach(function (e) { sticky.classList.toggle('is-hidden', e.isIntersecting); });
     }, { threshold: 0.15 }).observe($('commande'));
