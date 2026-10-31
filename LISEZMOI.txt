@@ -1,0 +1,73 @@
+HTED Landing COD — version 3.1.2
+================================
+
+Landing pages produit légères pour WooCommerce, avec formulaire de commande
+en paiement à la livraison qui crée une vraie commande WooCommerce.
+
+INSTALLATION
+1. Extensions → Ajouter → Téléverser → hted-landing.zip → Activer.
+2. WooCommerce → HTED Landing : régler l'apparence (nom, logo, couleur, bandeau),
+   les frais de livraison, le statut des commandes et le Pixel Meta.
+
+AJOUTER UNE LANDING
+1. WooCommerce → HTED Landing → « Importer une landing » → choisir le paquet .zip.
+2. Si le paquet indique l'UGS du produit et que ce produit existe, la page est
+   publiée automatiquement à l'adresse /nom-de-la-landing/.
+   Sinon : dans la liste, saisir l'ID ou l'UGS du produit → « Publier la page ».
+(Méthode manuelle possible : une page contenant
+   [hted_landing landing="NOM" product="ID_DU_PRODUIT"])
+
+Le prix, le stock et le produit commandé viennent de la fiche WooCommerce.
+Le texte et les images viennent du paquet de landing.
+
+IMPORTER UNE PAGE FAITE AILLEURS (autre logiciel, IA, graphiste)
+- Accepté : un fichier .html seul, ou un .zip contenant index.html avec ses
+  images, CSS et JS (dossiers conservés).
+- Remplir « Nom de la page » (adresse) et « Produit (UGS ou ID) », puis Importer.
+  Nom vide : il est tiré du titre de la page (ex. « NovaWatch — … » → /novawatch/).
+- Le design de la page est conservé tel quel. Le plugin y ajoute son formulaire de
+  commande (frais Yalidine, commande WooCommerce, Pixel), isolé du CSS de la page.
+- Emplacement du formulaire, par ordre de priorité :
+    1. là où la page contient {{order_form}}
+    2. dans l'élément qui porte l'attribut data-hted-form
+    3. à la place de l'unique formulaire de la page (souvent un faux formulaire)
+    4. juste après la section de commande de la page (id="commander", "order"…)
+    5. sinon juste avant le pied de page
+- Les boutons « Commander », « Acheter », « Order »… et les liens #commande
+  descendent automatiquement au formulaire.
+- Une landing n'a pas de panier : « Ajouter au panier » est renommé « Commander »,
+  et ce bouton, les liens panier (add-to-cart, /panier, /checkout) et tout formulaire
+  de la page mènent au formulaire de commande au lieu d'ajouter au panier.
+- {{price}} et {{product_name}} sont remplacés par les valeurs WooCommerce :
+  à utiliser à la place d'un prix écrit en dur.
+- Si la page appelle des images ou un CSS absents de l'envoi, l'import le signale :
+  mettre la page ET ses fichiers dans un même .zip.
+- Réservé aux administrateurs (le HTML importé n'est pas filtré).
+
+CHANGER LE STYLE D'UNE LANDING
+- WooCommerce → HTED Landing → colonne « Style » : choisir le thème et, si besoin,
+  cocher la case pour une couleur de boutons propre à cette landing → Appliquer.
+- « Style d'origine » revient au thème prévu par le paquet.
+- Réimporter un paquet efface le réglage manuel : le paquet fait foi.
+- Nom, logo, couleur par défaut et bandeau : section Apparence (toutes les landings).
+
+METTRE À JOUR
+- Une landing : réimporter un paquet du même nom (il remplace l'ancien).
+- Le plugin : le supprimer puis téléverser la nouvelle version.
+  Les landings sont rangées dans wp-content/uploads/hted-landings/ :
+  elles ne sont PAS effacées.
+
+LIVRAISON
+- Si le plugin Yalidine WooCommerce est installé avec ses clés API, la landing
+  utilise automatiquement ses frais réels, ses communes et ses bureaux stop desk,
+  et remplit les champs nécessaires au bordereau.
+- Sinon, elle utilise les frais saisis dans les réglages (par défaut ou par wilaya).
+
+FORMAT D'UN PAQUET DE LANDING (.zip)
+  landing.html   le contenu (HTML simple : pas de script, pas de style inline)
+  landing.json   {"slug", "sku", "theme", "accent", "title", "description", "hero", "faq": [["Q","R"], ...]}
+                 theme : clair (défaut) | sombre | couleur | elegant | energie
+                 accent : couleur des boutons pour cette landing (#RRGGBB), facultatif
+  *.webp/jpg/png les images, à plat
+Jetons utilisables dans landing.html :
+  {{price}}  {{product_name}}  {{img:nom-image.webp}}
