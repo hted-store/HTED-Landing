@@ -1,4 +1,4 @@
-HTED Landing COD — version 3.2.1
+HTED Landing COD — version 3.3.0
 ================================
 
 Landing pages produit légères pour WooCommerce, avec formulaire de commande
@@ -18,6 +18,11 @@ LIVRAISON (source des communes et des frais, par ordre de priorité)
 3. Frais saisis à la main dans les réglages (commune tapée par le client).
 Désactiver l'ancien plugin Yalidine SANS HTED Livraison actif = mode 3 :
 vérifier que le tableau des frais est rempli.
+
+PANIER (HTED Vitrine)
+Le formulaire accepte une commande de plusieurs produits (champ items : [{id, qty}]).
+Frais HTED Livraison calculés sur le poids et le montant du panier entier (livraison offerte au-delà du seuil).
+Une seule commande WooCommerce avec toutes les lignes ; produit indisponible = commande refusée avec son nom.
 
 AJOUTER UNE LANDING
 1. WooCommerce → HTED Landing → « Importer une landing » → choisir le paquet .zip.

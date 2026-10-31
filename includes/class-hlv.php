@@ -28,11 +28,25 @@ class HTED_Landing_HLV {
         return !(class_exists('HTED_Landing_Yalidine') && HTED_Landing_Yalidine::available());
     }
 
-    /** Poids facturable du produit commandé (le calcul HTED Livraison lit sinon le panier, vide ici). */
-    private static function with_weight($product, $qty, callable $fn) {
+    /**
+     * Lignes commandées : [[WC_Product, qté], …]. Accepte aussi l'ancien appel (produit, quantité).
+     */
+    public static function lines($product, $qty = 1) {
+        if (is_array($product)) return array_values(array_filter($product, function ($l) { return $l[0] instanceof WC_Product; }));
+        return $product instanceof WC_Product ? [[$product, max(1, (int) $qty)]] : [];
+    }
+
+    public static function subtotal(array $lines) {
+        $t = 0.0;
+        foreach ($lines as $l) $t += (float) wc_get_price_to_display($l[0]) * (int) $l[1];
+        return $t;
+    }
+
+    /** Poids facturable des lignes commandées (le calcul HTED Livraison lit sinon le panier, vide ici). */
+    private static function with_weight(array $lines, callable $fn) {
         // Surpoids : seulement avec HTED Livraison ≥ 0.6 (avant, pas de calcul de poids : tarif de base)
         if (!method_exists('HLV_Carriers', 'set_kg') || !method_exists('HLV_Carriers', 'lines_kg')) return $fn();
-        HLV_Carriers::set_kg($product ? HLV_Carriers::lines_kg([[$product, max(1, (int) $qty)]]) : 0.0);
+        HLV_Carriers::set_kg($lines ? HLV_Carriers::lines_kg($lines) : 0.0);
         try {
             return $fn();
         } finally {
@@ -66,9 +80,10 @@ class HTED_Landing_HLV {
      * Frais et bureaux d'une commune pour ce produit et cette quantité.
      * home/desk = frais client (desk = le moins cher des bureaux), centers = bureaux triés (proches d'abord).
      */
-    public static function options($cid, $product, $qty) {
-        $subtotal = $product ? (float) wc_get_price_to_display($product) * max(1, (int) $qty) : 0;
-        $o = self::with_weight($product, $qty, function () use ($cid) { return HLV_Carriers::options((int) $cid); });
+    public static function options($cid, $product, $qty = 1) {
+        $lines = self::lines($product, $qty);
+        $subtotal = self::subtotal($lines);
+        $o = self::with_weight($lines, function () use ($cid) { return HLV_Carriers::options((int) $cid); });
         $centers = [];
         foreach ($o['desks'] as $d) {
             $centers[] = [
@@ -92,8 +107,8 @@ class HTED_Landing_HLV {
     }
 
     /** Sélection validée côté serveur, comme au checkout. @return array|string */
-    public static function resolve($cid, $type, $desk_key, $product, $qty) {
-        return self::with_weight($product, $qty, function () use ($cid, $type, $desk_key) {
+    public static function resolve($cid, $type, $desk_key, $product, $qty = 1) {
+        return self::with_weight(self::lines($product, $qty), function () use ($cid, $type, $desk_key) {
             return HLV_Carriers::resolve((int) $cid, $type === 'desk' ? 'desk' : 'home', (string) $desk_key);
         });
     }
@@ -139,11 +154,12 @@ class HTED_Landing_HLV {
                 'callback' => function (WP_REST_Request $r) {
                     $cid = absint($r['commune']);
                     if (!$cid || !self::available()) return new WP_REST_Response(['home' => null, 'desk' => null, 'centers' => []], 400);
-                    $product = wc_get_product(absint($r['product']));
-                    $qty = max(1, min(HTED_Landing_Order::MAX_QTY, absint($r['qty'])));
+                    // Panier : items=12:2,15:1 (produit ou variation : quantité) ; sinon product + qty
+                    $lines = (string) $r['items'] !== '' ? HTED_Landing_Order::parse_items((string) $r['items'])
+                        : self::lines(wc_get_product(absint($r['product'])) ?: null, max(1, min(HTED_Landing_Order::MAX_QTY, absint($r['qty']))));
                     nocache_headers();
                     try {
-                        return new WP_REST_Response(self::options($cid, $product ?: null, $qty));
+                        return new WP_REST_Response(self::options($cid, $lines));
                     } catch (Throwable $e) {
                         if (function_exists('wc_get_logger')) wc_get_logger()->error('HTED Landing (frais) : ' . $e->getMessage(), ['source' => 'hted-landing']);
                         return new WP_REST_Response(['home' => null, 'desk' => null, 'centers' => []], 500);

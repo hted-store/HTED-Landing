@@ -2,7 +2,7 @@
 /**
  * Plugin Name: HTED Landing COD
  * Description: Landing pages produit avec formulaire COD qui crée une vraie commande WooCommerce. Importe des paquets HTED ou n'importe quelle page HTML faite avec un autre outil ou une IA.
- * Version: 3.2.1
+ * Version: 3.3.0
  * Author: HTED Store
  * Requires Plugins: woocommerce
  * Text Domain: hted-landing
@@ -10,7 +10,7 @@
 
 if (!defined('ABSPATH')) exit;
 
-define('HTED_LANDING_VERSION', '3.2.1');
+define('HTED_LANDING_VERSION', '3.3.0');
 define('HTED_LANDING_DIR', plugin_dir_path(__FILE__));
 define('HTED_LANDING_URL', plugin_dir_url(__FILE__));
 

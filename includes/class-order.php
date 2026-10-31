@@ -8,7 +8,35 @@ if (!defined('ABSPATH')) exit;
  */
 class HTED_Landing_Order {
 
-    const MAX_QTY = 5;
+    const MAX_QTY = 5;        // formulaire d'un seul produit
+    const MAX_LINE_QTY = 10;  // par ligne de panier
+    const MAX_LINES = 20;
+
+    /**
+     * Panier envoyé par la vitrine : [{id, qty}, …] ou "12:2,15:1". Renvoie [[WC_Product, qté], …].
+     * $lenient = true (calcul des frais) : lignes invalides ignorées ; false (commande) : gardées pour être refusées.
+     */
+    public static function parse_items($raw, $lenient = true) {
+        $pairs = [];
+        if (is_string($raw)) {
+            foreach (explode(',', $raw) as $chunk) { $x = explode(':', $chunk); $pairs[] = ['id' => $x[0] ?? 0, 'qty' => $x[1] ?? 1]; }
+        } elseif (is_array($raw)) {
+            $pairs = $raw;
+        }
+        $merged = [];
+        foreach (array_slice($pairs, 0, self::MAX_LINES) as $it) {
+            $id = absint(is_array($it) ? ($it['id'] ?? 0) : 0);
+            $q = max(1, min(self::MAX_LINE_QTY, absint(is_array($it) ? ($it['qty'] ?? 1) : 1)));
+            if ($id) $merged[$id] = min(self::MAX_LINE_QTY, ($merged[$id] ?? 0) + $q);
+        }
+        $out = [];
+        foreach ($merged as $id => $q) {
+            $prod = wc_get_product($id);
+            if ($lenient && (!$prod || !$prod->is_purchasable())) continue;
+            $out[] = [$prod ?: null, $q];
+        }
+        return $out;
+    }
 
     public static function init() {
         add_action('rest_api_init', function () {
@@ -92,21 +120,27 @@ class HTED_Landing_Order {
             return self::fail('Indiquez votre commune.');
         }
 
-        $product = wc_get_product(absint($p['product_id'] ?? 0));
-        if (!$product || !$product->is_purchasable() || !$product->is_in_stock()) {
-            return self::fail('Ce produit n\'est plus disponible.', 409);
+        // Lignes commandées : un panier (items) ou un seul produit (product_id + qty)
+        $lines = !empty($p['items']) ? self::parse_items($p['items'], false)
+            : [[wc_get_product(absint($p['product_id'] ?? 0)), $qty]];
+        if (!$lines) return self::fail('Votre panier est vide.');
+        foreach ($lines as $l) {
+            list($lp, $lq) = $l;
+            if (!$lp || !$lp->is_purchasable() || !$lp->is_in_stock()) {
+                return self::fail(($lp ? '« ' . $lp->get_name() . ' » n\'est plus disponible.' : 'Ce produit n\'est plus disponible.') . ' Retirez-le pour continuer.', 409);
+            }
+            if (!$lp->has_enough_stock($lq)) return self::fail('Stock insuffisant pour « ' . $lp->get_name() . ' ».', 409);
         }
-        if (!$product->has_enough_stock($qty)) {
-            return self::fail('Stock insuffisant pour cette quantité.', 409);
-        }
+        $product = $lines[0][0];
+        $subtotal = HTED_Landing_HLV::subtotal($lines);
 
         // Frais recalculés côté serveur (jamais ceux envoyés par le navigateur).
         $hlv_sel = null;
         if ($hlv) {
-            $hlv_sel = HTED_Landing_HLV::resolve($hlv_cid, $type, sanitize_text_field((string) ($p['desk'] ?? '')), $product, $qty);
+            $hlv_sel = HTED_Landing_HLV::resolve($hlv_cid, $type, sanitize_text_field((string) ($p['desk'] ?? '')), $lines);
             if (is_string($hlv_sel)) return self::fail($hlv_sel);
             if ((int) $hlv_sel['w'] !== HTED_Landing_Yalidine::wilaya_id($state)) return self::fail('La commune ne correspond pas à la wilaya choisie.');
-            $fee = HTED_Landing_HLV::client_fee($hlv_sel['fee'], (float) wc_get_price_to_display($product) * $qty);
+            $fee = HTED_Landing_HLV::client_fee($hlv_sel['fee'], $subtotal);
             $known = true;
         } elseif ($yld) {
             $yfee = HTED_Landing_Yalidine::fee($yld_data['wilaya_id'], $yld_data['commune_id'], $type);
@@ -123,7 +157,7 @@ class HTED_Landing_Order {
         }
 
         // Double clic / renvoi : même téléphone dans les 30 min = même commande.
-        $dup_key = 'hl_dup_' . md5($phone . '|' . $product->get_id());
+        $dup_key = 'hl_dup_' . md5($phone . '|' . implode(',', array_map(function ($l) { return $l[0]->get_id() . 'x' . $l[1]; }, $lines)));
         $existing = get_transient($dup_key);
         if ($existing && ($o = wc_get_order($existing))) {
             return new WP_REST_Response(['ok' => true, 'number' => $o->get_order_number(), 'total' => (float) $o->get_total(), 'phone' => $phone, 'duplicate' => true]);
@@ -138,7 +172,7 @@ class HTED_Landing_Order {
 
         try {
             $order = wc_create_order(['created_via' => 'hted-landing']);
-            $order->add_product($product, $qty);
+            foreach ($lines as $l) $order->add_product($l[0], $l[1]);
 
             $parts = preg_split('/\s+/', $name, 2);
             $addr = [

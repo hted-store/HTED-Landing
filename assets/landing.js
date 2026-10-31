@@ -8,6 +8,15 @@
   var $ = function (id) { return R.getElementById(id); };
   var form = $('hl-form');
   var qty = 1;
+  // Mode panier (vitrine) : C.items = [{id, qty, price}] — plusieurs produits, un seul formulaire
+  var cart = function () { return Array.isArray(C.items) && C.items.length ? C.items : null; };
+  var subtotal = function () {
+    var it = cart();
+    return it ? it.reduce(function (t, i) { return t + i.price * i.qty; }, 0) : C.price * qty;
+  };
+  var itemsParam = function () { return cart().map(function (i) { return i.id + ':' + i.qty; }).join(','); };
+  var ids = function () { return cart() ? cart().map(function (i) { return String(i.id); }) : [String(C.productId)]; };
+  var count = function () { return cart() ? cart().reduce(function (t, i) { return t + i.qty; }, 0) : qty; };
   var initiated = false;
   // Mode Yalidine : frais réels de la commune choisie (chargés depuis le serveur).
   var yfees = { home: null, desk: null, loaded: false };
@@ -64,12 +73,12 @@
     if (cf) cf.hidden = !(C.yalidine && delivery() === 'desk' && f.loaded);
 
     var fee = f[delivery()];
-    var sub = C.price * qty;
+    var sub = subtotal();
     var total = $('hl-total');
     if (!state || !f.loaded) total.textContent = fmt(sub) + ' DA + livraison';
     else if (f.unknown || fee === null || fee === undefined) total.textContent = fmt(sub) + ' DA + livraison à confirmer';
     else total.textContent = fmt(sub + fee) + ' DA';
-    $('hl-qty').textContent = qty;
+    if ($('hl-qty')) $('hl-qty').textContent = qty;
   }
 
   function fillCenters() {
@@ -127,7 +136,7 @@
     if (!cid) return;
     var my = ++reqC;
     if (!keep) $('hl-total').textContent = 'Calcul des frais…';
-    getJSON('hlv-options?commune=' + cid + '&product=' + C.productId + '&qty=' + qty).then(function (f) {
+    getJSON('hlv-options?commune=' + cid + (cart() ? '&items=' + encodeURIComponent(itemsParam()) : '&product=' + C.productId + '&qty=' + qty)).then(function (f) {
       if (my !== reqC) return;
       yfees = { home: f.home, desk: f.desk, loaded: true };
       centers = f.centers || [];
@@ -172,7 +181,7 @@
   form.addEventListener('focusin', function () {
     if (initiated) return;
     initiated = true;
-    track('InitiateCheckout', { content_ids: [String(C.productId)], content_type: 'product', value: C.price, currency: 'DZD' });
+    track('InitiateCheckout', { content_ids: ids(), content_type: 'product', value: subtotal(), currency: 'DZD', num_items: count() });
   });
   form.querySelectorAll('[data-qty]').forEach(function (b) {
     b.addEventListener('click', function () {
@@ -229,6 +238,7 @@
         delivery: delivery(),
         qty: qty,
         product_id: C.productId,
+        items: cart() ? cart().map(function (i) { return { id: i.id, qty: i.qty }; }) : undefined,
         landing: C.landing,
         website: $('hl-website').value,
         elapsed: Date.now() - start
@@ -237,7 +247,8 @@
       .then(function (r) { return r.json(); })
       .then(function (res) {
         if (!res || !res.ok) throw new Error((res && res.message) || 'Erreur. Réessayez.');
-        if (!res.duplicate) track('Purchase', { content_ids: [String(C.productId)], content_type: 'product', value: res.total, currency: 'DZD', num_items: qty });
+        if (!res.duplicate) track('Purchase', { content_ids: ids(), content_type: 'product', value: res.total, currency: 'DZD', num_items: count() });
+        try { window.dispatchEvent(new CustomEvent('hted:ordered', { detail: res })); } catch (e) {}
         form.hidden = true;
         $('hl-success-name').textContent = name.value.trim().split(/\s+/)[0];
         $('hl-success-id').textContent = res.number;
@@ -305,6 +316,9 @@
       goToForm();
     }, true);
   }
+
+  // La vitrine prévient quand le panier change : frais recalculés (poids, livraison offerte)
+  window.HTED_LANDING_UPDATE = function () { if (C.hlv && $('hl-commune').value) loadOptions(true); else refresh(); };
 
   refresh();
 })();
