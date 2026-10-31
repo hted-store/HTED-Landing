@@ -1,4 +1,4 @@
-HTED Landing COD — version 3.1.2
+HTED Landing COD — version 3.2.0
 ================================
 
 Landing pages produit légères pour WooCommerce, avec formulaire de commande
@@ -8,6 +8,16 @@ INSTALLATION
 1. Extensions → Ajouter → Téléverser → hted-landing.zip → Activer.
 2. WooCommerce → HTED Landing : régler l'apparence (nom, logo, couleur, bandeau),
    les frais de livraison, le statut des commandes et le Pixel Meta.
+
+LIVRAISON (source des communes et des frais, par ordre de priorité)
+1. HTED Livraison (si son checkout est actif, ou si l'ancien plugin Yalidine est absent) :
+   mêmes communes, bureaux, transporteurs (Yalidine, ZR…), frais, remise, surpoids
+   et livraison offerte que le checkout. Les commandes portent les champs _hlv_* :
+   colis, impression et suivi depuis le bloc « Livraison », comme au checkout.
+2. Ancien plugin yalidine-woocommerce (transition).
+3. Frais saisis à la main dans les réglages (commune tapée par le client).
+Désactiver l'ancien plugin Yalidine SANS HTED Livraison actif = mode 3 :
+vérifier que le tableau des frais est rempli.
 
 AJOUTER UNE LANDING
 1. WooCommerce → HTED Landing → « Importer une landing » → choisir le paquet .zip.

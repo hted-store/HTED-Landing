@@ -41,12 +41,12 @@
       <fieldset class="hl-field" id="hl-delivery">
         <legend>Livraison</legend>
         <label class="hl-radio"><input type="radio" name="delivery" value="home" checked> <span>À domicile</span> <b data-fee="home"></b></label>
-        <label class="hl-radio" id="hl-desk-opt"><input type="radio" name="delivery" value="desk"> <span>Bureau Yalidine (stop desk)</span> <b data-fee="desk"></b></label>
+        <label class="hl-radio" id="hl-desk-opt"><input type="radio" name="delivery" value="desk"> <span><?php echo $hlv ? 'Retrait au bureau (stop desk)' : 'Bureau Yalidine (stop desk)'; ?></span> <b data-fee="desk"></b></label>
       </fieldset>
 
       <?php if ($yalidine) : ?>
       <div class="hl-field" id="hl-center-field" hidden>
-        <label for="hl-center">Bureau Yalidine</label>
+        <label for="hl-center"><?php echo $hlv ? 'Bureau de retrait' : 'Bureau Yalidine'; ?></label>
         <select id="hl-center" name="center_id"><option value="">Choisir un bureau</option></select>
       </div>
       <?php endif; ?>

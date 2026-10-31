@@ -62,9 +62,16 @@ class HTED_Landing_Order {
         if (!$phone)               return self::fail('Numéro invalide : 10 chiffres commençant par 05, 06 ou 07.');
         $wilayas = HTED_Landing_Settings::wilayas();
         if (!isset($wilayas[$state])) return self::fail('Choisissez votre wilaya.');
-        $yld = HTED_Landing_Yalidine::available();
+        $hlv = HTED_Landing_HLV::available();
+        $yld = !$hlv && HTED_Landing_Yalidine::available();
         $yld_data = [];
-        if ($yld) {
+        $hlv_cid = 0;
+        if ($hlv) {
+            $hlv_cid = absint($p['commune_id'] ?? 0);
+            $city = HTED_Landing_HLV::commune_name($hlv_cid);
+            if ($city === '') return self::fail('Choisissez votre commune.');
+            if ($type === 'desk' && trim((string) ($p['desk'] ?? '')) === '') return self::fail('Choisissez le bureau où récupérer le colis.');
+        } elseif ($yld) {
             $wid = HTED_Landing_Yalidine::wilaya_id($state);
             $cid = absint($p['commune_id'] ?? 0);
             $commune = null;
@@ -94,7 +101,14 @@ class HTED_Landing_Order {
         }
 
         // Frais recalculés côté serveur (jamais ceux envoyés par le navigateur).
-        if ($yld) {
+        $hlv_sel = null;
+        if ($hlv) {
+            $hlv_sel = HTED_Landing_HLV::resolve($hlv_cid, $type, sanitize_text_field((string) ($p['desk'] ?? '')), $product, $qty);
+            if (is_string($hlv_sel)) return self::fail($hlv_sel);
+            if ((int) $hlv_sel['w'] !== HTED_Landing_Yalidine::wilaya_id($state)) return self::fail('La commune ne correspond pas à la wilaya choisie.');
+            $fee = HTED_Landing_HLV::client_fee($hlv_sel['fee'], (float) wc_get_price_to_display($product) * $qty);
+            $known = true;
+        } elseif ($yld) {
             $yfee = HTED_Landing_Yalidine::fee($yld_data['wilaya_id'], $yld_data['commune_id'], $type);
             if ($yfee === null) return self::fail($type === 'desk' ? 'Le stop desk n\'est pas disponible pour cette commune.' : 'Livraison à domicile non disponible pour cette commune.');
             $fee = $yfee;
@@ -134,14 +148,22 @@ class HTED_Landing_Order {
                 'country'    => 'DZ',
                 'state'      => $state,
                 'city'       => $city,
-                'address_1'  => ($type === 'desk' && !empty($yld_data['center_name'])) ? 'Stop desk : ' . $yld_data['center_name'] : $city,
+                'address_1'  => $hlv_sel
+                    ? ($type === 'desk' ? 'Stop desk : ' . $hlv_sel['desk_name'] : $city)
+                    : (($type === 'desk' && !empty($yld_data['center_name'])) ? 'Stop desk : ' . $yld_data['center_name'] : $city),
             ];
             $order->set_address($addr, 'billing');
             unset($addr['phone']);
             $order->set_address($addr, 'shipping');
 
             $ship = new WC_Order_Item_Shipping();
-            $ship->set_method_title($type === 'desk' ? 'Stop desk Yalidine' : 'Livraison à domicile');
+            if ($hlv_sel) {
+                $ship->set_method_title(($type === 'desk' ? 'Retrait : ' . $hlv_sel['desk_name'] : 'Livraison à domicile')
+                    . ' — ' . HTED_Landing_HLV::carrier_label($hlv_sel['carrier']));
+                $ship->add_meta_data('Transporteur', HTED_Landing_HLV::carrier_label($hlv_sel['carrier']), true);
+            } else {
+                $ship->set_method_title($type === 'desk' ? 'Stop desk Yalidine' : 'Livraison à domicile');
+            }
             $ship->set_method_id('hted_landing_' . $type);
             $ship->set_total($fee);
             $order->add_item($ship);
@@ -154,7 +176,10 @@ class HTED_Landing_Order {
             $order->update_meta_data('_hted_delivery_type', $type);
             if (!$known) $order->update_meta_data('_hted_fee_to_confirm', 'yes');
             foreach ($yld_data as $k => $v) $order->update_meta_data('_hted_yld_' . $k, $v);
-            if ($yld) {
+            if ($hlv_sel) {
+                // Mêmes champs que le checkout HTED Livraison : colis, impression et suivi depuis le bloc « Livraison ».
+                HTED_Landing_HLV::save($order, $hlv_sel);
+            } elseif ($yld) {
                 // Champs lus par le plugin yalidine-woocommerce pour créer le bordereau.
                 $wname = HTED_Landing_Yalidine::wilaya_name($yld_data['wilaya_id'], preg_replace('/^\d+\s*–\s*/u', '', $wilayas[$state]));
                 $order->update_meta_data('_yld_wilaya_id', $yld_data['wilaya_id']);
@@ -167,6 +192,8 @@ class HTED_Landing_Order {
 
             $order->calculate_totals(false);
             $note = 'Commande via landing « ' . $slug . ' » · ' . ($type === 'desk' ? 'stop desk' : 'domicile');
+            if ($hlv_sel) $note .= ' · ' . HTED_Landing_HLV::carrier_label($hlv_sel['carrier'])
+                . ($type === 'desk' ? ' · bureau ' . $hlv_sel['desk_name'] : '') . ' · ' . number_format_i18n($fee) . ' DA (HTED Livraison)';
             if (!empty($yld_data['center_name'])) $note .= ' · bureau ' . $yld_data['center_name'] . ' (#' . $yld_data['center_id'] . ')';
             if (!empty($yld_data['commune_id'])) $note .= ' · commune Yalidine #' . $yld_data['commune_id'];
             if (!$known) $note .= ' · frais de livraison à confirmer par téléphone';

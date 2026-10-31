@@ -29,11 +29,13 @@ $on_accent = (0.299 * $rgb[0] + 0.587 * $rgb[1] + 0.114 * $rgb[2]) > 165 ? '#111
 $accent_dark = sprintf('#%02x%02x%02x', $rgb[0] * .8, $rgb[1] * .8, $rgb[2] * .8);
 
 $wilayas = HTED_Landing_Settings::wilayas();
-$yalidine = HTED_Landing_Yalidine::available();
+$hlv      = HTED_Landing_HLV::available();
+$yalidine = $hlv || HTED_Landing_Yalidine::available(); // listes déroulantes commune + bureau
 $config = [
     'endpoint'  => esc_url_raw(rest_url('hted-landing/v1/order')),
     'api'       => esc_url_raw(rest_url('hted-landing/v1/')),
     'yalidine'  => $yalidine,
+    'hlv'       => $hlv,
     'productId' => $product->get_id(),
     'landing'   => $hted['slug'],
     'price'     => $price,

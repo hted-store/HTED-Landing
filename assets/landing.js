@@ -40,6 +40,11 @@
   function refresh() {
     var state = $('hl-wilaya').value;
     var f = currentFees();
+    // HTED Livraison : le prix du stop desk est celui du bureau choisi (Yalidine et ZR n'ont pas le même tarif).
+    if (C.hlv && delivery() === 'desk') {
+      var cs = $('hl-center'), pick = cs && cs.value ? centers.filter(function (c) { return c.id === cs.value; })[0] : null;
+      if (pick) f = { home: f.home, desk: pick.price, loaded: f.loaded, unknown: f.unknown };
+    }
     var deskOpt = $('hl-desk-opt');
     var deskAvailable = !f.loaded || f.unknown || f.desk !== null;
     deskOpt.hidden = !deskAvailable;
@@ -71,11 +76,17 @@
     var sel = $('hl-center');
     if (!sel) return;
     var cid = parseInt($('hl-commune').value, 10) || 0;
-    var list = centers.slice().sort(function (a, b) { return (b.commune_id === cid) - (a.commune_id === cid); });
+    var prev = sel.value;
+    // HTED Livraison : liste déjà triée par le serveur (bureaux de la commune d'abord).
+    var list = C.hlv ? centers.slice() : centers.slice().sort(function (a, b) { return (b.commune_id === cid) - (a.commune_id === cid); });
     sel.innerHTML = '<option value="">Choisir un bureau</option>' + list.map(function (c) {
-      return '<option value="' + c.id + '">' + esc(c.name) + (c.address ? ' – ' + esc(c.address) : '') + '</option>';
+      var label = C.hlv
+        ? (c.near ? '📍 ' : '') + esc(c.name) + ' (' + esc(c.carrier) + ') – ' + (c.price === 0 ? 'offerte' : fmt(c.price) + ' DA')
+        : esc(c.name) + (c.address ? ' – ' + esc(c.address) : '');
+      return '<option value="' + esc(String(c.id)) + '">' + label + '</option>';
     }).join('');
-    if (list.length === 1) sel.value = String(list[0].id);
+    if (prev && list.some(function (c) { return String(c.id) === prev; })) sel.value = prev;
+    else if (list.length === 1) sel.value = String(list[0].id);
   }
 
   function onWilaya() {
@@ -90,7 +101,7 @@
     sel.innerHTML = '<option value="">' + (wid ? 'Chargement…' : "Choisir d'abord la wilaya") + '</option>';
     refresh();
     if (!wid) return;
-    getJSON('communes?wilaya=' + wid).then(function (list) {
+    getJSON((C.hlv ? 'hlv-communes' : 'communes') + '?wilaya=' + wid).then(function (list) {
       if (my !== reqW) return;
       sel.innerHTML = '<option value="">Choisir la commune</option>' + list.map(function (c) {
         return '<option value="' + c.id + '">' + esc(c.name) + '</option>';
@@ -100,6 +111,7 @@
       if (my !== reqW) return;
       sel.innerHTML = '<option value="">Erreur, réessayez</option>';
     });
+    if (C.hlv) return; // HTED Livraison : bureaux chargés avec les frais de la commune
     getJSON('centers?wilaya=' + wid).then(function (list) {
       if (my !== reqW) return;
       centers = list;
@@ -107,8 +119,31 @@
     }).catch(function () {});
   }
 
+  // HTED Livraison : frais et bureaux de la commune pour ce produit et cette quantité (poids, livraison offerte).
+  function loadOptions(keep) {
+    var cid = parseInt($('hl-commune').value, 10) || 0;
+    if (!keep) { yfees = { home: null, desk: null, loaded: false }; centers = []; fillCenters(); }
+    refresh();
+    if (!cid) return;
+    var my = ++reqC;
+    if (!keep) $('hl-total').textContent = 'Calcul des frais…';
+    getJSON('hlv-options?commune=' + cid + '&product=' + C.productId + '&qty=' + qty).then(function (f) {
+      if (my !== reqC) return;
+      yfees = { home: f.home, desk: f.desk, loaded: true };
+      centers = f.centers || [];
+      fillCenters();
+      if (f.home === null && f.desk === null) showError('Livraison indisponible pour cette commune. Appelez-nous.');
+      refresh();
+    }).catch(function () {
+      if (my !== reqC) return;
+      yfees = { home: null, desk: null, loaded: true, unknown: true };
+      refresh();
+    });
+  }
+
   function onCommune() {
     if (!C.yalidine) return refresh();
+    if (C.hlv) return loadOptions(false);
     var wid = parseInt($('hl-wilaya').value.replace(/\D/g, ''), 10) || 0;
     var cid = parseInt($('hl-commune').value, 10) || 0;
     yfees = { home: null, desk: null, loaded: false };
@@ -141,8 +176,10 @@
   });
   form.querySelectorAll('[data-qty]').forEach(function (b) {
     b.addEventListener('click', function () {
+      var before = qty;
       qty = Math.max(1, Math.min(5, qty + parseInt(b.getAttribute('data-qty'), 10)));
       refresh();
+      if (C.hlv && qty !== before && $('hl-commune').value) loadOptions(true); // poids et seuil de gratuité
     });
   });
 
@@ -171,7 +208,7 @@
     if (!phoneOk(phone.value)) return showError('Numéro invalide : 10 chiffres commençant par 05, 06 ou 07.', phone);
     if (!wil.value) return showError('Choisissez votre wilaya.', wil);
     if (C.yalidine ? !city.value : city.value.trim().length < 2) return showError('Indiquez votre commune.', city);
-    if (C.yalidine && delivery() === 'desk' && center && !center.value) return showError('Choisissez le bureau Yalidine.', center);
+    if (C.yalidine && delivery() === 'desk' && center && !center.value) return showError(C.hlv ? 'Choisissez le bureau de retrait.' : 'Choisissez le bureau Yalidine.', center);
     $('hl-error').hidden = true;
 
     var btn = $('hl-submit');
@@ -187,7 +224,8 @@
         state: wil.value,
         city: C.yalidine ? '' : city.value.trim(),
         commune_id: C.yalidine ? parseInt(city.value, 10) : 0,
-        center_id: center ? parseInt(center.value, 10) || 0 : 0,
+        center_id: center && !C.hlv ? parseInt(center.value, 10) || 0 : 0,
+        desk: center && C.hlv && delivery() === 'desk' ? center.value : '',
         delivery: delivery(),
         qty: qty,
         product_id: C.productId,

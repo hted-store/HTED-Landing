@@ -214,7 +214,9 @@ class HTED_Landing_Settings {
         <div class="wrap">
             <h1>HTED Landing</h1>
             <p>Importez un paquet de landing : sa page est publiée automatiquement à l'adresse <code>/nom-de-la-landing/</code> si le paquet indique l'UGS du produit, sinon choisissez le produit dans la liste. La page s'affiche sans le thème, et chaque commande arrive dans WooCommerce comme une commande normale.</p>
-            <?php if (class_exists('HTED_Landing_Yalidine') && HTED_Landing_Yalidine::available()) : ?>
+            <?php if (class_exists('HTED_Landing_HLV') && HTED_Landing_HLV::available()) : ?>
+                <div class="notice notice-success inline"><p><strong>HTED Livraison détecté.</strong> La landing utilise le même référentiel que le checkout : communes, bureaux, transporteurs (Yalidine, ZR Express…), frais, remise, surpoids et livraison offerte. Les commandes se traitent depuis le bloc « Livraison ». Les frais ci-dessous ne servent qu'en secours.</p></div>
+            <?php elseif (class_exists('HTED_Landing_Yalidine') && HTED_Landing_Yalidine::available()) : ?>
                 <div class="notice notice-success inline"><p><strong>Plugin Yalidine détecté.</strong> La landing utilise les frais réels Yalidine (même calcul et même remise que le checkout), la liste des communes et des bureaux stop desk. Les frais ci-dessous ne servent qu'en secours.</p></div>
             <?php else : ?>
                 <div class="notice notice-warning inline"><p>Plugin Yalidine non détecté ou clés API absentes : la landing utilise les frais saisis ci-dessous.</p></div>
