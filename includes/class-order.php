@@ -215,6 +215,7 @@ class HTED_Landing_Order {
             $order->set_customer_ip_address($ip);
             $order->set_customer_user_agent(wc_get_user_agent());
             $order->update_meta_data('_hted_landing', $slug);
+            self::save_attribution($order, $p['attribution'] ?? null);
             $order->update_meta_data('_hted_delivery_type', $type);
             if (!$known) $order->update_meta_data('_hted_fee_to_confirm', 'yes');
             foreach ($yld_data as $k => $v) $order->update_meta_data('_hted_yld_' . $k, $v);
@@ -263,6 +264,22 @@ class HTED_Landing_Order {
     }
 
     /** Ligne produit non enregistrée (comme WC_Abstract_Order::add_product, sans le save() prématuré). */
+    /**
+     * Origine de la commande, enregistrée comme le fait le checkout WooCommerce (colonne « Origine », rapports).
+     * Valeurs envoyées par landing.js depuis les cookies sbjs_* (WooCommerce ou HTED Vitrine).
+     */
+    private static function save_attribution(WC_Order $order, $a): void {
+        if (!is_array($a) || empty($a['source_type'])) return;
+        $types = ['utm', 'organic', 'referral', 'typein', 'mobile_app', 'admin'];
+        if (!in_array($a['source_type'], $types, true)) return;
+        foreach (['source_type', 'referrer', 'utm_campaign', 'utm_source', 'utm_medium', 'utm_content', 'utm_id', 'utm_term',
+                  'session_entry', 'session_start_time', 'session_pages', 'session_count', 'user_agent', 'device_type'] as $k) {
+            if (!isset($a[$k]) || $a[$k] === '' || !is_scalar($a[$k])) continue;
+            $v = in_array($k, ['referrer', 'session_entry'], true) ? esc_url_raw((string) $a[$k]) : sanitize_text_field((string) $a[$k]);
+            if ($v !== '') $order->update_meta_data('_wc_order_attribution_' . $k, mb_substr($v, 0, 300));
+        }
+    }
+
     private static function line_item(WC_Product $p, int $qty): WC_Order_Item_Product {
         $total = wc_get_price_excluding_tax($p, ['qty' => $qty]);
         $item = new WC_Order_Item_Product();

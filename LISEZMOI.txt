@@ -93,3 +93,9 @@ PIXEL META ET FACEBOOK FOR WOOCOMMERCE (3.3.1)
 - Le Purchase du navigateur reprend le même identifiant (event_id) : Meta ne compte l'achat qu'une fois.
 - Test : Gestionnaire d'événements Meta > Tester les événements, commande passée en étant DÉCONNECTÉ
   de WordPress (Facebook for WooCommerce ignore les administrateurs connectés).
+
+
+3.4.0 — Origine des commandes
+Les commandes passées par le formulaire (landing ou panier HTED Vitrine) enregistrent leur origine comme le checkout
+WooCommerce (colonne « Origine » : Source : Fb, Référent, Direct…). landing.js lit les cookies sbjs_* posés par
+WooCommerce sur les pages WordPress, ou par HTED Vitrine ≥ 0.7.2 sur les pages de la vitrine.

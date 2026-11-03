@@ -33,6 +33,20 @@
     });
   };
   var esc = function (s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+  // Origine de la commande (colonne « Origine » de WooCommerce) : lue dans les cookies sbjs_* posés par WooCommerce
+  // sur les pages WordPress, ou par HTED Vitrine (même format) sur les pages de la vitrine.
+  var attribution = function () {
+    var ck = function (n) { var m = document.cookie.match('(?:^|; )' + n + '=([^;]*)'); if (!m) return {}; var o = {}, v = m[1];
+      try { v = decodeURIComponent(v); } catch (e) {}
+      v.split('|||').forEach(function (kv) { var i = kv.indexOf('='); if (i > 0) o[kv.slice(0, i)] = kv.slice(i + 1); }); return o; };
+    var cur = ck('sbjs_current'), add = ck('sbjs_current_add'), ses = ck('sbjs_session'), ud = ck('sbjs_udata');
+    if (!cur.typ) return undefined;
+    var ua = navigator.userAgent || '';
+    return { source_type: cur.typ, utm_source: cur.src, utm_medium: cur.mdm, utm_campaign: cur.cmp, utm_content: cur.cnt,
+      utm_term: cur.trm, utm_id: cur.id, referrer: add.rf, session_entry: add.ep, session_start_time: add.fd,
+      session_pages: ses.pgs, session_count: ud.vst, user_agent: ua,
+      device_type: /tablet|ipad/i.test(ua) ? 'Tablet' : (/mobi|android/i.test(ua) ? 'Mobile' : 'Desktop') };
+  };
 
   function delivery() {
     var r = form.querySelector('input[name=delivery]:checked');
@@ -241,6 +255,7 @@
         product_id: C.productId,
         items: cart() ? cart().map(function (i) { return { id: i.id, qty: i.qty }; }) : undefined,
         landing: C.landing,
+        attribution: attribution(),
         website: $('hl-website').value,
         elapsed: Date.now() - start
       })
