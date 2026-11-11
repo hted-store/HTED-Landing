@@ -9,7 +9,7 @@
   var form = $('hl-form');
   // Minimum d'articles et « 1 offert tous les N » (option hted_landing_bundle, recalculée par le serveur)
   var B = C.bundle || { min: 0, lot: 0, unit: 'article', units: 'articles' };
-  var minQty = Math.max(1, Math.min(5, B.min || 1)); // formulaire d'un seul produit : 5 au plus
+  var minQty = Math.max(1, Math.min(5, B.min_amount ? Math.ceil(B.min_amount / (C.price || B.min_amount)) : (B.min || 1))); // formulaire d'un seul produit : 5 au plus
   var qty = minQty;
   // Mode panier (vitrine) : C.items = [{id, qty, price}] — plusieurs produits, un seul formulaire
   var cart = function () { return Array.isArray(C.items) && C.items.length ? C.items : null; };
@@ -30,7 +30,10 @@
     for (var j = 0; j < n; j++) s += u[j];
     return s;
   };
-  var minLeft = function () { return B.min > 1 ? Math.max(0, B.min - count()) : 0; };
+  var minLeft = function () {
+    if (B.min_amount) return Math.max(0, B.min_amount - subtotal());
+    return B.min > 1 ? Math.max(0, B.min - count()) : 0;
+  };
   var initiated = false;
   // Mode Yalidine : frais réels de la commune choisie (chargés depuis le serveur).
   var yfees = { home: null, desk: null, loaded: false };
@@ -247,7 +250,9 @@
     if (!wil.value) return showError('Choisissez votre wilaya.', wil);
     if (C.yalidine ? !city.value : city.value.trim().length < 2) return showError('Indiquez votre commune.', city);
     if (C.yalidine && delivery() === 'desk' && center && !center.value) return showError(C.hlv ? 'Choisissez le bureau de retrait.' : 'Choisissez le bureau Yalidine.', center);
-    if (minLeft() > 0) return showError('Commande à partir de ' + B.min + ' ' + B.units + ' : ajoutez-en encore ' + minLeft() + '.');
+    if (minLeft() > 0) return showError(B.min_amount
+      ? 'Commande à partir de ' + fmt(B.min_amount) + ' DA (hors livraison) : il manque ' + fmt(minLeft()) + ' DA.'
+      : 'Commande à partir de ' + B.min + ' ' + B.units + ' : ajoutez-en encore ' + minLeft() + '.');
     $('hl-error').hidden = true;
 
     var btn = $('hl-submit');

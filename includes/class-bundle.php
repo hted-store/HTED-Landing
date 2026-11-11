@@ -3,7 +3,8 @@ if (!defined('ABSPATH')) exit;
 
 /**
  * Minimum d'articles par commande et « 1 offert tous les N » (option hted_landing_bundle).
- *   wp option update hted_landing_bundle '{"min":3,"lot":7,"unit":"sachet","units":"sachets"}' --format=json
+ *   wp option update hted_landing_bundle '{"min_amount":1050,"lot":7,"unit":"sachet","units":"sachets"}' --format=json
+ * min_amount = minimum en DA hors livraison (prioritaire sur min = minimum en nombre d'articles).
  * lot = 7 : 6 achetés + le 7e offert (le moins cher). Option absente = règle éteinte.
  * HTED Vitrine lit la même option pour afficher la barre et la remise : une seule règle pour les deux.
  */
@@ -18,6 +19,7 @@ class HTED_Landing_Bundle {
         $lot = (int) ($o['lot'] ?? 0);
         return [
             'min'   => max(0, (int) ($o['min'] ?? 0)),
+            'min_amount' => max(0, (int) ($o['min_amount'] ?? 0)),
             'lot'   => $lot >= 2 ? $lot : 0,
             'unit'  => $unit,
             'units' => sanitize_text_field((string) ($o['units'] ?? $unit . 's')),
@@ -33,6 +35,13 @@ class HTED_Landing_Bundle {
     /** Message d'erreur si la commande n'atteint pas le minimum, sinon ''. */
     public static function min_error(array $lines): string {
         $b = self::get();
+        if ($b['min_amount'] > 0) {
+            $sum = 0.0;
+            foreach ($lines as $l) $sum += (float) wc_get_price_to_display($l[0]) * (int) $l[1];
+            if ($sum >= $b['min_amount']) return '';
+            return sprintf('Commande à partir de %s DA (hors livraison) : il manque %s DA.',
+                number_format($b['min_amount'], 0, ',', ' '), number_format($b['min_amount'] - $sum, 0, ',', ' '));
+        }
         $n = self::count($lines);
         if ($b['min'] < 2 || $n >= $b['min']) return '';
         $left = $b['min'] - $n;
