@@ -131,6 +131,9 @@ class HTED_Landing_Order {
             }
             if (!$lp->has_enough_stock($lq)) return self::fail('Stock insuffisant pour « ' . $lp->get_name() . ' ».', 409);
         }
+        // Minimum d'articles et article offert (option hted_landing_bundle, éteinte si absente)
+        if (($min_err = HTED_Landing_Bundle::min_error($lines)) !== '') return self::fail($min_err);
+        list($nfree, $discount) = HTED_Landing_Bundle::free($lines);
         $product = $lines[0][0];
         $subtotal = HTED_Landing_HLV::subtotal($lines);
 
@@ -210,6 +213,16 @@ class HTED_Landing_Order {
             $ship->set_total($fee);
             $order->add_item($ship);
 
+            if ($nfree > 0) {
+                // Remise en ligne de frais négative : visible dans la commande, déduite du montant à encaisser.
+                $gift = new WC_Order_Item_Fee();
+                $gift->set_name(HTED_Landing_Bundle::label($nfree));
+                $gift->set_amount((string) -$discount);
+                $gift->set_total((string) -$discount);
+                $gift->set_tax_status('none');
+                $order->add_item($gift);
+            }
+
             $order->set_payment_method('cod');
             $order->set_payment_method_title('Paiement à la livraison');
             $order->set_customer_ip_address($ip);
@@ -239,6 +252,7 @@ class HTED_Landing_Order {
             if (!empty($yld_data['center_name'])) $note .= ' · bureau ' . $yld_data['center_name'] . ' (#' . $yld_data['center_id'] . ')';
             if (!empty($yld_data['commune_id'])) $note .= ' · commune Yalidine #' . $yld_data['commune_id'];
             if (!$known) $note .= ' · frais de livraison à confirmer par téléphone';
+            if ($nfree > 0) $note .= ' · ' . HTED_Landing_Bundle::label($nfree) . ' (−' . number_format_i18n($discount) . ' DA)';
             $order->calculate_totals(false); // premier enregistrement, statut « en attente » (comme le checkout)
             // Puis passage au statut choisi : déclenche stock, e-mails et note, comme avant.
             $order->set_status(HTED_Landing_Settings::get('order_status'), $note);

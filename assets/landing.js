@@ -7,7 +7,10 @@
   var R = (host && host.shadowRoot) || document;
   var $ = function (id) { return R.getElementById(id); };
   var form = $('hl-form');
-  var qty = 1;
+  // Minimum d'articles et « 1 offert tous les N » (option hted_landing_bundle, recalculée par le serveur)
+  var B = C.bundle || { min: 0, lot: 0, unit: 'article', units: 'articles' };
+  var minQty = Math.max(1, Math.min(5, B.min || 1)); // formulaire d'un seul produit : 5 au plus
+  var qty = minQty;
   // Mode panier (vitrine) : C.items = [{id, qty, price}] — plusieurs produits, un seul formulaire
   var cart = function () { return Array.isArray(C.items) && C.items.length ? C.items : null; };
   var subtotal = function () {
@@ -17,6 +20,17 @@
   var itemsParam = function () { return cart().map(function (i) { return i.id + ':' + i.qty; }).join(','); };
   var ids = function () { return cart() ? cart().map(function (i) { return String(i.id); }) : [String(C.productId)]; };
   var count = function () { return cart() ? cart().reduce(function (t, i) { return t + i.qty; }, 0) : qty; };
+  var discount = function () {
+    if (!B.lot) return 0;
+    var u = [], it = cart();
+    if (it) it.forEach(function (i) { for (var k = 0; k < i.qty; k++) u.push(i.price); });
+    else for (var k = 0; k < qty; k++) u.push(C.price);
+    u.sort(function (a, b) { return a - b; });
+    var n = Math.floor(u.length / B.lot), s = 0;
+    for (var j = 0; j < n; j++) s += u[j];
+    return s;
+  };
+  var minLeft = function () { return B.min > 1 ? Math.max(0, B.min - count()) : 0; };
   var initiated = false;
   // Mode Yalidine : frais réels de la commune choisie (chargés depuis le serveur).
   var yfees = { home: null, desk: null, loaded: false };
@@ -88,7 +102,7 @@
     if (cf) cf.hidden = !(C.yalidine && delivery() === 'desk' && f.loaded);
 
     var fee = f[delivery()];
-    var sub = subtotal();
+    var sub = subtotal() - discount();
     var total = $('hl-total');
     if (!state || !f.loaded) total.textContent = fmt(sub) + ' DA + livraison';
     else if (f.unknown || fee === null || fee === undefined) total.textContent = fmt(sub) + ' DA + livraison à confirmer';
@@ -201,7 +215,7 @@
   form.querySelectorAll('[data-qty]').forEach(function (b) {
     b.addEventListener('click', function () {
       var before = qty;
-      qty = Math.max(1, Math.min(5, qty + parseInt(b.getAttribute('data-qty'), 10)));
+      qty = Math.max(minQty, Math.min(5, qty + parseInt(b.getAttribute('data-qty'), 10)));
       refresh();
       if (C.hlv && qty !== before && $('hl-commune').value) loadOptions(true); // poids et seuil de gratuité
     });
@@ -233,6 +247,7 @@
     if (!wil.value) return showError('Choisissez votre wilaya.', wil);
     if (C.yalidine ? !city.value : city.value.trim().length < 2) return showError('Indiquez votre commune.', city);
     if (C.yalidine && delivery() === 'desk' && center && !center.value) return showError(C.hlv ? 'Choisissez le bureau de retrait.' : 'Choisissez le bureau Yalidine.', center);
+    if (minLeft() > 0) return showError('Commande à partir de ' + B.min + ' ' + B.units + ' : ajoutez-en encore ' + minLeft() + '.');
     $('hl-error').hidden = true;
 
     var btn = $('hl-submit');

@@ -40,6 +40,7 @@ $config = [
     'landing'   => $hted['slug'],
     'price'     => $price,
     'fees'      => HTED_Landing_Settings::fees(),
+    'bundle'    => HTED_Landing_Bundle::get(),
     'pixel'     => $pixel !== '',
 ];
 
